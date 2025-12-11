@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useIsFocused } from '@react-navigation/native';
 
 interface DailyTask {
   id: string;
@@ -25,18 +26,14 @@ const DEFAULT_TASKS: DailyTask[] = [
 export default function HomeScreen() {
   const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(DEFAULT_TASKS);
   const [loading, setLoading] = useState(true);
+  const isFocused = useIsFocused();
 
-  // Load data when app starts
+  // Reload data whenever the screen comes into focus
   useEffect(() => {
-    loadData();
-  }, []);
-
-  // Save data whenever tasks change
-  useEffect(() => {
-    if (!loading) {
-      saveData();
+    if (isFocused) {
+      loadData();
     }
-  }, [dailyTasks]);
+  }, [isFocused]);
 
   const loadData = async () => {
     try {
@@ -58,6 +55,13 @@ export default function HomeScreen() {
       console.log('Error saving data:', error);
     }
   };
+
+  // Save data whenever tasks change
+  useEffect(() => {
+    if (!loading) {
+      saveData();
+    }
+  }, [dailyTasks]);
 
   const updateTaskProgress = (taskId: string, increment: boolean) => {
     setDailyTasks(prev => prev.map(task => 
