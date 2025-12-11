@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface DailyTask {
   id: string;
@@ -8,20 +9,55 @@ interface DailyTask {
   current: number;
   unit: string;
   color: string;
+  enabled: boolean;
 }
 
+const DEFAULT_TASKS: DailyTask[] = [
+  { id: 'sleep', name: '6 hrs Sleep', target: 6, current: 0, unit: 'hrs', color: '#6366f1', enabled: true },
+  { id: 'gym1', name: 'Morning Gym', target: 1, current: 0, unit: 'hr', color: '#ef4444', enabled: true },
+  { id: 'fullstack', name: 'Fullstack Learning', target: 2, current: 0, unit: 'hrs', color: '#3b82f6', enabled: true },
+  { id: 'schoolwork', name: 'School Work', target: 4, current: 0, unit: 'hrs', color: '#22c55e', enabled: true },
+  { id: 'doordash', name: 'DoorDash', target: 5, current: 0, unit: 'hrs', color: '#f97316', enabled: true },
+  { id: 'homework', name: 'School Homework', target: 4, current: 0, unit: 'hrs', color: '#a855f7', enabled: true },
+  { id: 'gym2', name: 'Evening Gym', target: 1, current: 0, unit: 'hr', color: '#ef4444', enabled: true },
+];
+
 export default function HomeScreen() {
-  const [count, setCount] = useState(0);
-  
-  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>([
-    { id: 'sleep', name: '6 hrs Sleep', target: 6, current: 0, unit: 'hrs', color: '#6366f1' },
-    { id: 'gym1', name: 'Morning Gym', target: 1, current: 0, unit: 'hr', color: '#ef4444' },
-    { id: 'fullstack', name: 'Fullstack Learning', target: 2, current: 0, unit: 'hrs', color: '#3b82f6' },
-    { id: 'schoolwork', name: 'School Work', target: 4, current: 0, unit: 'hrs', color: '#22c55e' },
-    { id: 'doordash', name: 'DoorDash', target: 5, current: 0, unit: 'hrs', color: '#f97316' },
-    { id: 'homework', name: 'School Homework', target: 4, current: 0, unit: 'hrs', color: '#a855f7' },
-    { id: 'gym2', name: 'Evening Gym', target: 1, current: 0, unit: 'hr', color: '#ef4444' },
-  ]);
+  const [dailyTasks, setDailyTasks] = useState<DailyTask[]>(DEFAULT_TASKS);
+  const [loading, setLoading] = useState(true);
+
+  // Load data when app starts
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // Save data whenever tasks change
+  useEffect(() => {
+    if (!loading) {
+      saveData();
+    }
+  }, [dailyTasks]);
+
+  const loadData = async () => {
+    try {
+      const savedTasks = await AsyncStorage.getItem('dailyTasks');
+      if (savedTasks) {
+        setDailyTasks(JSON.parse(savedTasks));
+      }
+    } catch (error) {
+      console.log('Error loading data:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const saveData = async () => {
+    try {
+      await AsyncStorage.setItem('dailyTasks', JSON.stringify(dailyTasks));
+    } catch (error) {
+      console.log('Error saving data:', error);
+    }
+  };
 
   const updateTaskProgress = (taskId: string, increment: boolean) => {
     setDailyTasks(prev => prev.map(task => 
@@ -34,22 +70,54 @@ export default function HomeScreen() {
     ));
   };
 
+  const resetDailyProgress = () => {
+    Alert.alert(
+      'Reset Progress',
+      'Reset all progress for today?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset',
+          style: 'destructive',
+          onPress: () => {
+            setDailyTasks(prev => prev.map(task => ({ ...task, current: 0 })));
+          }
+        }
+      ]
+    );
+  };
+
   const getDailyProgress = () => {
-    const completed = dailyTasks.reduce((acc, task) => 
+    const enabledTasks = dailyTasks.filter(t => t.enabled);
+    if (enabledTasks.length === 0) return 0;
+    const completed = enabledTasks.reduce((acc, task) => 
       acc + (task.current >= task.target ? 1 : 0), 0
     );
-    return Math.round((completed / dailyTasks.length) * 100);
+    return Math.round((completed / enabledTasks.length) * 100);
   };
+
+  if (loading) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.loadingText}>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Winter Break Grind 💪</Text>
-        <Text style={styles.subtitle}>Daily Progress: {getDailyProgress()}%</Text>
+        <View style={styles.headerRow}>
+          <Text style={styles.subtitle}>Daily Progress: {getDailyProgress()}%</Text>
+          <TouchableOpacity onPress={resetDailyProgress} style={styles.resetButton}>
+            <Text style={styles.resetButtonText}>Reset</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        {dailyTasks.map(task => {
+        {dailyTasks.filter(t => t.enabled).map(task => {
           const progress = (task.current / task.target) * 100;
           return (
             <View key={task.id} style={styles.taskCard}>
@@ -98,11 +166,22 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#0f0f23',
   },
+  loadingText: {
+    color: '#fff',
+    fontSize: 18,
+    textAlign: 'center',
+    marginTop: 100,
+  },
   header: {
     paddingTop: 60,
     paddingBottom: 20,
     paddingHorizontal: 20,
     backgroundColor: '#1a1a2e',
+  },
+  headerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   title: {
     fontSize: 32,
@@ -113,6 +192,17 @@ const styles = StyleSheet.create({
   subtitle: {
     fontSize: 18,
     color: '#a855f7',
+    fontWeight: '600',
+  },
+  resetButton: {
+    backgroundColor: '#374151',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  resetButtonText: {
+    color: '#fff',
+    fontSize: 14,
     fontWeight: '600',
   },
   scrollView: {
