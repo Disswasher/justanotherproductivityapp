@@ -3,33 +3,151 @@ import { View, Text, StyleSheet, TouchableOpacity, ScrollView, TextInput, Modal,
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useIsFocused } from '@react-navigation/native';
 
+interface SubTask {
+  id: string;
+  name: string;
+  completed: boolean;
+}
+
 interface Quest {
   id: string;
   name: string;
   completed: boolean;
   streak: number;
+  lastCompletedDate: string | null;
+  category: 'today' | 'current' | 'longterm';
+  subtasks: SubTask[];
   createdAt: number;
 }
 
 const DEFAULT_QUESTS: Quest[] = [
-  { id: '1', name: 'Finish Odin Project Foundations', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '2', name: 'Create Arduino Projects', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '3', name: 'Configure Linux Better', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '4', name: 'Set Up NAS on Old Computer', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '5', name: 'Pray 5 Times Daily', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '6', name: 'Read 2 Pages Quran + Translation', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '7', name: 'No Goon Streak', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '8', name: 'Research Projects Portfolio', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '9', name: 'Build Virtual Assistant', completed: false, streak: 0, createdAt: Date.now() },
-  { id: '10', name: 'Build Startup Foundations', completed: false, streak: 0, createdAt: Date.now() },
+  {
+    id: '1',
+    name: 'Pray 5 Times Daily',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'today',
+    subtasks: [
+      { id: 's1', name: 'Fajr', completed: false },
+      { id: 's2', name: 'Dhuhr', completed: false },
+      { id: 's3', name: 'Asr', completed: false },
+      { id: 's4', name: 'Maghrib', completed: false },
+      { id: 's5', name: 'Isha', completed: false },
+    ],
+    createdAt: Date.now(),
+  },
+  {
+    id: '2',
+    name: 'Read 2 Pages Quran + Translation',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'today',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '3',
+    name: 'Get Recommended Water (8 glasses)',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'today',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '4',
+    name: 'Finish Odin Project Foundations',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'current',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '5',
+    name: 'Create Arduino Projects',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'current',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '6',
+    name: 'Configure Linux Better',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'current',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '7',
+    name: 'Set Up NAS on Old Computer',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'current',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '8',
+    name: 'No Goon Streak',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'current',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '9',
+    name: 'Research Projects Portfolio',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'current',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '10',
+    name: 'Build Virtual Assistant',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'longterm',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
+  {
+    id: '11',
+    name: 'Build Startup Foundations',
+    completed: false,
+    streak: 0,
+    lastCompletedDate: null,
+    category: 'longterm',
+    subtasks: [],
+    createdAt: Date.now(),
+  },
 ];
 
 export default function QuestsScreen() {
   const [quests, setQuests] = useState<Quest[]>(DEFAULT_QUESTS);
   const [loading, setLoading] = useState(true);
   const [showAddModal, setShowAddModal] = useState(false);
-  const [newQuestName, setNewQuestName] = useState('');
+  const [showEditModal, setShowEditModal] = useState(false);
   const [editingQuest, setEditingQuest] = useState<Quest | null>(null);
+  const [newQuestName, setNewQuestName] = useState('');
+  const [newQuestCategory, setNewQuestCategory] = useState<'today' | 'current' | 'longterm'>('current');
+  const [expandedQuests, setExpandedQuests] = useState<Set<string>>(new Set());
   const isFocused = useIsFocused();
 
   useEffect(() => {
@@ -60,18 +178,117 @@ export default function QuestsScreen() {
     }
   };
 
+  const getTodayDateString = () => {
+    return new Date().toDateString();
+  };
+
   const toggleQuest = (questId: string) => {
+    const today = getTodayDateString();
     const updated = quests.map(quest => {
       if (quest.id === questId) {
+        const wasCompletedToday = quest.lastCompletedDate === today;
+        
+        if (quest.completed) {
+          // Uncompleting - decrease streak only if it was completed today
+          return {
+            ...quest,
+            completed: false,
+            streak: wasCompletedToday ? Math.max(0, quest.streak - 1) : quest.streak,
+            lastCompletedDate: null,
+          };
+        } else {
+          // Completing - only increment streak if not already done today
+          if (wasCompletedToday) {
+            return quest; // Already completed today, no change
+          }
+          
+          return {
+            ...quest,
+            completed: true,
+            streak: quest.streak + 1,
+            lastCompletedDate: today,
+          };
+        }
+      }
+      return quest;
+    });
+    saveData(updated);
+  };
+
+  const toggleSubtask = (questId: string, subtaskId: string) => {
+    const updated = quests.map(quest => {
+      if (quest.id === questId) {
+        const updatedSubtasks = quest.subtasks.map(st =>
+          st.id === subtaskId ? { ...st, completed: !st.completed } : st
+        );
+        
+        // Auto-complete parent if all subtasks done
+        const allSubtasksComplete = updatedSubtasks.every(st => st.completed);
+        
         return {
           ...quest,
-          completed: !quest.completed,
-          streak: quest.completed ? quest.streak : quest.streak + 1
+          subtasks: updatedSubtasks,
+          completed: allSubtasksComplete,
         };
       }
       return quest;
     });
     saveData(updated);
+  };
+
+  const moveQuest = (questId: string, direction: 'up' | 'down') => {
+    const index = quests.findIndex(q => q.id === questId);
+    if (index === -1) return;
+    
+    const quest = quests[index];
+    const categoryQuests = quests.filter(q => q.category === quest.category);
+    const categoryIndex = categoryQuests.findIndex(q => q.id === questId);
+    
+    if (direction === 'up' && categoryIndex === 0) return;
+    if (direction === 'down' && categoryIndex === categoryQuests.length - 1) return;
+    
+    const newCategoryQuests = [...categoryQuests];
+    const swapIndex = direction === 'up' ? categoryIndex - 1 : categoryIndex + 1;
+    [newCategoryQuests[categoryIndex], newCategoryQuests[swapIndex]] = 
+    [newCategoryQuests[swapIndex], newCategoryQuests[categoryIndex]];
+    
+    const otherQuests = quests.filter(q => q.category !== quest.category);
+    const result = [...otherQuests, ...newCategoryQuests].sort((a, b) => {
+      const catOrder = { today: 0, current: 1, longterm: 2 };
+      return catOrder[a.category] - catOrder[b.category];
+    });
+    
+    saveData(result);
+  };
+
+  const deleteQuest = (questId: string) => {
+    Alert.alert('Delete Quest', 'Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Delete',
+        style: 'destructive',
+        onPress: () => saveData(quests.filter(q => q.id !== questId)),
+      },
+    ]);
+  };
+
+  const openEditModal = (quest: Quest) => {
+    setEditingQuest(quest);
+    setNewQuestName(quest.name);
+    setNewQuestCategory(quest.category);
+    setShowEditModal(true);
+  };
+
+  const saveEdit = () => {
+    if (!newQuestName.trim() || !editingQuest) return;
+    
+    const updated = quests.map(q =>
+      q.id === editingQuest.id
+        ? { ...q, name: newQuestName, category: newQuestCategory }
+        : q
+    );
+    saveData(updated);
+    closeModals();
   };
 
   const addQuest = () => {
@@ -82,57 +299,164 @@ export default function QuestsScreen() {
       name: newQuestName,
       completed: false,
       streak: 0,
+      lastCompletedDate: null,
+      category: newQuestCategory,
+      subtasks: [],
       createdAt: Date.now(),
     };
     
     saveData([...quests, newQuest]);
-    setNewQuestName('');
-    setShowAddModal(false);
+    closeModals();
   };
 
-  const deleteQuest = (questId: string) => {
-    Alert.alert(
-      'Delete Quest',
-      'Are you sure you want to delete this quest?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            const updated = quests.filter(q => q.id !== questId);
-            saveData(updated);
-          }
+  const addSubtask = (questId: string) => {
+    Alert.prompt('Add Subtask', 'Enter subtask name:', (text) => {
+      if (!text?.trim()) return;
+      
+      const updated = quests.map(q => {
+        if (q.id === questId) {
+          return {
+            ...q,
+            subtasks: [
+              ...q.subtasks,
+              { id: Date.now().toString(), name: text, completed: false },
+            ],
+          };
         }
-      ]
-    );
+        return q;
+      });
+      saveData(updated);
+    });
   };
 
-  const editQuest = (quest: Quest) => {
-    setEditingQuest(quest);
-    setNewQuestName(quest.name);
-    setShowAddModal(true);
-  };
-
-  const saveEdit = () => {
-    if (!newQuestName.trim() || !editingQuest) return;
-    
-    const updated = quests.map(q =>
-      q.id === editingQuest.id ? { ...q, name: newQuestName } : q
-    );
-    saveData(updated);
-    setNewQuestName('');
-    setEditingQuest(null);
+  const closeModals = () => {
     setShowAddModal(false);
+    setShowEditModal(false);
+    setEditingQuest(null);
+    setNewQuestName('');
+    setNewQuestCategory('current');
   };
 
-  const getStats = () => {
-    const completed = quests.filter(q => q.completed).length;
-    const totalStreak = quests.reduce((sum, q) => sum + q.streak, 0);
-    return { completed, total: quests.length, totalStreak };
+  const toggleExpand = (questId: string) => {
+    setExpandedQuests(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(questId)) {
+        newSet.delete(questId);
+      } else {
+        newSet.add(questId);
+      }
+      return newSet;
+    });
   };
 
-  const stats = getStats();
+  const renderQuest = (quest: Quest, index: number, categoryQuests: Quest[]) => {
+    const isExpanded = expandedQuests.has(quest.id);
+    const hasSubtasks = quest.subtasks.length > 0;
+    const completedSubtasks = quest.subtasks.filter(st => st.completed).length;
+    const progress = hasSubtasks ? (completedSubtasks / quest.subtasks.length) * 100 : 0;
+    
+    return (
+      <View key={quest.id} style={styles.questWrapper}>
+        <TouchableOpacity
+          style={[styles.questCard, quest.completed && styles.questCardCompleted]}
+          onPress={() => hasSubtasks ? toggleExpand(quest.id) : toggleQuest(quest.id)}
+        >
+          <View style={styles.questContent}>
+            <TouchableOpacity
+              style={styles.checkbox}
+              onPress={() => toggleQuest(quest.id)}
+            >
+              {quest.completed && <Text style={styles.checkmark}>✓</Text>}
+            </TouchableOpacity>
+            
+            <View style={styles.questInfo}>
+              <Text style={[styles.questName, quest.completed && styles.questNameCompleted]}>
+                {quest.name}
+              </Text>
+              {hasSubtasks && (
+                <Text style={styles.subtaskProgress}>
+                  {completedSubtasks}/{quest.subtasks.length} subtasks • {Math.round(progress)}%
+                </Text>
+              )}
+              {quest.streak > 0 && (
+                <Text style={styles.streakText}>🔥 {quest.streak} day streak</Text>
+              )}
+            </View>
+
+            <View style={styles.questActions}>
+              {index > 0 && (
+                <TouchableOpacity onPress={() => moveQuest(quest.id, 'up')} style={styles.moveButton}>
+                  <Text style={styles.moveButtonText}>↑</Text>
+                </TouchableOpacity>
+              )}
+              {index < categoryQuests.length - 1 && (
+                <TouchableOpacity onPress={() => moveQuest(quest.id, 'down')} style={styles.moveButton}>
+                  <Text style={styles.moveButtonText}>↓</Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          </View>
+        </TouchableOpacity>
+
+        {isExpanded && hasSubtasks && (
+          <View style={styles.subtasksContainer}>
+            {quest.subtasks.map(subtask => (
+              <TouchableOpacity
+                key={subtask.id}
+                style={styles.subtaskRow}
+                onPress={() => toggleSubtask(quest.id, subtask.id)}
+              >
+                <View style={[styles.subtaskCheckbox, subtask.completed && styles.subtaskCheckboxCompleted]}>
+                  {subtask.completed && <Text style={styles.subtaskCheckmark}>✓</Text>}
+                </View>
+                <Text style={[styles.subtaskName, subtask.completed && styles.subtaskNameCompleted]}>
+                  {subtask.name}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            <TouchableOpacity
+              style={styles.addSubtaskButton}
+              onPress={() => addSubtask(quest.id)}
+            >
+              <Text style={styles.addSubtaskText}>+ Add subtask</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        <View style={styles.questCardActions}>
+          <TouchableOpacity style={styles.cardActionButton} onPress={() => openEditModal(quest)}>
+            <Text style={styles.cardActionText}>Edit</Text>
+          </TouchableOpacity>
+          {!hasSubtasks && (
+            <TouchableOpacity
+              style={styles.cardActionButton}
+              onPress={() => addSubtask(quest.id)}
+            >
+              <Text style={styles.cardActionText}>Add Subtask</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity
+            style={[styles.cardActionButton, styles.deleteCardButton]}
+            onPress={() => deleteQuest(quest.id)}
+          >
+            <Text style={styles.cardActionText}>Delete</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  };
+
+  const renderCategory = (category: 'today' | 'current' | 'longterm', title: string, icon: string) => {
+    const categoryQuests = quests.filter(q => q.category === category);
+    if (categoryQuests.length === 0) return null;
+
+    return (
+      <View style={styles.categorySection}>
+        <Text style={styles.categoryTitle}>{icon} {title}</Text>
+        {categoryQuests.map((quest, index) => renderQuest(quest, index, categoryQuests))}
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -142,84 +466,59 @@ export default function QuestsScreen() {
     );
   }
 
+  const todayQuests = quests.filter(q => q.category === 'today');
+  const currentQuests = quests.filter(q => q.category === 'current');
+  const longtermQuests = quests.filter(q => q.category === 'longterm');
+  const totalStreak = quests.reduce((sum, q) => sum + q.streak, 0);
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.title}>Side Quests 🎯</Text>
         <View style={styles.statsRow}>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>{stats.completed}/{stats.total}</Text>
+            <Text style={styles.statValue}>{quests.filter(q => q.completed).length}/{quests.length}</Text>
             <Text style={styles.statLabel}>Completed</Text>
           </View>
           <View style={styles.statBox}>
-            <Text style={styles.statValue}>🔥 {stats.totalStreak}</Text>
+            <Text style={styles.statValue}>🔥 {totalStreak}</Text>
             <Text style={styles.statLabel}>Total Streak</Text>
           </View>
         </View>
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
-        <TouchableOpacity 
-          style={styles.addButton} 
+        <TouchableOpacity
+          style={styles.addButton}
           onPress={() => {
             setEditingQuest(null);
             setNewQuestName('');
+            setNewQuestCategory('current');
             setShowAddModal(true);
           }}
         >
           <Text style={styles.addButtonText}>+ Add New Quest</Text>
         </TouchableOpacity>
 
-        {quests.map(quest => (
-          <TouchableOpacity
-            key={quest.id}
-            style={[styles.questCard, quest.completed && styles.questCardCompleted]}
-            onPress={() => toggleQuest(quest.id)}
-            onLongPress={() => editQuest(quest)}
-          >
-            <View style={styles.questContent}>
-              <View style={styles.checkbox}>
-                {quest.completed && <Text style={styles.checkmark}>✓</Text>}
-              </View>
-              <View style={styles.questInfo}>
-                <Text style={[styles.questName, quest.completed && styles.questNameCompleted]}>
-                  {quest.name}
-                </Text>
-                {quest.streak > 0 && (
-                  <Text style={styles.streakText}>🔥 {quest.streak} day streak</Text>
-                )}
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.deleteButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                deleteQuest(quest.id);
-              }}
-            >
-              <Text style={styles.deleteButtonText}>×</Text>
-            </TouchableOpacity>
-          </TouchableOpacity>
-        ))}
+        {renderCategory('today', 'TODAY - Urgent', '🔴')}
+        {renderCategory('current', 'CURRENT - Winter Break Goals', '🎯')}
+        {renderCategory('longterm', 'LONG TERM - Future Goals', '🚀')}
       </ScrollView>
 
       {/* Add/Edit Modal */}
       <Modal
-        visible={showAddModal}
+        visible={showAddModal || showEditModal}
         animationType="slide"
         transparent={true}
-        onRequestClose={() => {
-          setShowAddModal(false);
-          setEditingQuest(null);
-          setNewQuestName('');
-        }}
+        onRequestClose={closeModals}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <Text style={styles.modalTitle}>
               {editingQuest ? 'Edit Quest' : 'New Quest'}
             </Text>
-            
+
+            <Text style={styles.label}>Quest Name</Text>
             <TextInput
               style={styles.input}
               value={newQuestName}
@@ -229,24 +528,37 @@ export default function QuestsScreen() {
               autoFocus
             />
 
-            <View style={styles.modalActions}>
+            <Text style={styles.label}>Category</Text>
+            <View style={styles.categoryButtons}>
               <TouchableOpacity
-                style={[styles.modalButton, styles.cancelButton]}
-                onPress={() => {
-                  setShowAddModal(false);
-                  setEditingQuest(null);
-                  setNewQuestName('');
-                }}
+                style={[styles.categoryButton, newQuestCategory === 'today' && styles.categoryButtonActive]}
+                onPress={() => setNewQuestCategory('today')}
               >
+                <Text style={styles.categoryButtonText}>🔴 Today</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.categoryButton, newQuestCategory === 'current' && styles.categoryButtonActive]}
+                onPress={() => setNewQuestCategory('current')}
+              >
+                <Text style={styles.categoryButtonText}>🎯 Current</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.categoryButton, newQuestCategory === 'longterm' && styles.categoryButtonActive]}
+                onPress={() => setNewQuestCategory('longterm')}
+              >
+                <Text style={styles.categoryButtonText}>🚀 Long Term</Text>
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={[styles.modalButton, styles.cancelButton]} onPress={closeModals}>
                 <Text style={styles.modalButtonText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[styles.modalButton, styles.saveButton]}
                 onPress={editingQuest ? saveEdit : addQuest}
               >
-                <Text style={styles.modalButtonText}>
-                  {editingQuest ? 'Save' : 'Add'}
-                </Text>
+                <Text style={styles.modalButtonText}>{editingQuest ? 'Save' : 'Add'}</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -311,23 +623,33 @@ const styles = StyleSheet.create({
     padding: 16,
     borderRadius: 12,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 20,
   },
   addButtonText: {
     color: '#fff',
     fontSize: 18,
     fontWeight: 'bold',
   },
+  categorySection: {
+    marginBottom: 24,
+  },
+  categoryTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    color: '#a855f7',
+    marginBottom: 12,
+    textTransform: 'uppercase',
+    letterSpacing: 1,
+  },
+  questWrapper: {
+    marginBottom: 12,
+  },
   questCard: {
     backgroundColor: '#1e1e3f',
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
     borderWidth: 2,
     borderColor: '#2a2a4a',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
   },
   questCardCompleted: {
     backgroundColor: '#1a3a2a',
@@ -336,7 +658,6 @@ const styles = StyleSheet.create({
   questContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    flex: 1,
   },
   checkbox: {
     width: 28,
@@ -360,29 +681,105 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#fff',
     fontWeight: '500',
+    marginBottom: 4,
   },
   questNameCompleted: {
     textDecorationLine: 'line-through',
     color: '#9ca3af',
   },
+  subtaskProgress: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginBottom: 4,
+  },
   streakText: {
     fontSize: 14,
     color: '#f97316',
-    marginTop: 4,
     fontWeight: '600',
   },
-  deleteButton: {
+  questActions: {
+    flexDirection: 'row',
+    gap: 4,
+  },
+  moveButton: {
     width: 32,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 6,
     backgroundColor: '#374151',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  deleteButtonText: {
-    color: '#ef4444',
-    fontSize: 24,
+  moveButtonText: {
+    color: '#fff',
+    fontSize: 18,
     fontWeight: 'bold',
+  },
+  subtasksContainer: {
+    backgroundColor: '#16162a',
+    borderRadius: 8,
+    padding: 12,
+    marginTop: 8,
+  },
+  subtaskRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 8,
+  },
+  subtaskCheckbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: '#6b7280',
+    marginRight: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  subtaskCheckboxCompleted: {
+    backgroundColor: '#22c55e',
+    borderColor: '#22c55e',
+  },
+  subtaskCheckmark: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: 'bold',
+  },
+  subtaskName: {
+    fontSize: 14,
+    color: '#d1d5db',
+  },
+  subtaskNameCompleted: {
+    textDecorationLine: 'line-through',
+    color: '#6b7280',
+  },
+  addSubtaskButton: {
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  addSubtaskText: {
+    color: '#8b5cf6',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  questCardActions: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 12,
+  },
+  cardActionButton: {
+    flex: 1,
+    backgroundColor: '#374151',
+    paddingVertical: 8,
+    borderRadius: 6,
+    alignItems: 'center',
+  },
+  deleteCardButton: {
+    backgroundColor: '#7f1d1d',
+  },
+  cardActionText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   modalOverlay: {
     flex: 1,
@@ -403,17 +800,46 @@ const styles = StyleSheet.create({
     color: '#fff',
     marginBottom: 20,
   },
+  label: {
+    color: '#9ca3af',
+    fontSize: 14,
+    marginBottom: 8,
+    marginTop: 12,
+  },
   input: {
     backgroundColor: '#2a2a4a',
     borderRadius: 8,
     padding: 12,
     color: '#fff',
     fontSize: 16,
-    marginBottom: 20,
+  },
+  categoryButtons: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  categoryButton: {
+    flex: 1,
+    backgroundColor: '#2a2a4a',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  categoryButtonActive: {
+    borderColor: '#8b5cf6',
+    backgroundColor: '#3a2a5a',
+  },
+  categoryButtonText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '600',
   },
   modalActions: {
     flexDirection: 'row',
     gap: 12,
+    marginTop: 24,
   },
   modalButton: {
     flex: 1,
